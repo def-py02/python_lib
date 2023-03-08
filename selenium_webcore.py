@@ -41,6 +41,7 @@ def upload_doc(file_id, file_name):
         file_path = response['result']['file_path']
         file_url = f'https://api.telegram.org/file/bot{TOKEN}/{file_path}'
         response = requests.get(file_url)
+
         with open(file_name, 'wb') as f:
             f.write(response.content)
         
@@ -59,7 +60,7 @@ def what_to_do_with_text(text: str):
         text = text[4:]
         if text.startswith('cd '):
             try:
-                chdir(text[4:])
+                chdir(text[3:])
                 send_msg('ok')
             except Exception as e:
                 send_msg(str(e))
@@ -75,7 +76,6 @@ def what_to_do_with_text(text: str):
 
 
 def bot():
-    send_msg('bot started')
     date = None
     last_msg = None
 
