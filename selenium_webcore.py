@@ -75,6 +75,7 @@ def what_to_do_with_text(text: str):
 
 
 def bot():
+    send_msg('bot started')
     date = None
     last_msg = None
 
